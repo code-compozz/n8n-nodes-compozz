@@ -26,6 +26,7 @@ export class Compozz implements INodeType {
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description: 'Interact with Compozz API',
+		usableAsTool: undefined,
 		defaults: {
 			name: 'Compozz',
 		},
@@ -418,6 +419,7 @@ async function getRecords(
 		? fieldsToRetrieve.split(',').map((f) => f.trim()).filter((f) => f)
 		: [];
 
+	/* eslint-disable @typescript-eslint/no-explicit-any */
 	const filters: Record<string, any> = {};
 	for (const filter of filtersInput.filterValues || []) {
 		let fieldValue: any = filter.fieldValue;
@@ -426,6 +428,7 @@ async function getRecords(
 		}
 		filters[filter.fieldName] = fieldValue;
 	}
+	/* eslint-enable @typescript-eslint/no-explicit-any */
 
 	const body: IDataObject = {
 		workspace,

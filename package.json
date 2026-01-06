@@ -1,15 +1,21 @@
 {
 	"name": "n8n-nodes-compozz",
 	"version": "0.1.0",
-	"description": "",
+	"description": "n8n community node for Compozz",
 	"license": "MIT",
-	"homepage": "",
+	"homepage": "https://compozz.com",
 	"keywords": [
-		"n8n-community-node-package"
+		"n8n-community-node-package",
+		"compozz",
+		"n8n",
+		"workflow",
+		"automation",
+		"api",
+		"integration"
 	],
 	"author": {
-		"name": "",
-		"email": ""
+		"name": "Compozz",
+		"email": "contact@compozz.com"
 	},
 	"repository": {
 		"type": "git",
