@@ -3,76 +3,507 @@ import type {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	IDataObject,
+	IHttpRequestOptions,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+
+// Token cache to avoid re-authenticating for each item
+interface TokenCache {
+	token: string;
+	expiresAt: number;
+}
+
+const REFRESH_TOKEN_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const tokenCache = new Map<string, TokenCache>();
 
 export class Compozz implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Compozz',
 		name: 'compozz',
 		icon: { light: 'file:compozz.svg', dark: 'file:compozz.dark.svg' },
-		group: ['input'],
+		group: ['transform'],
 		version: 1,
-		description: 'Compozz Node',
+		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
+		description: 'Interact with Compozz API',
 		defaults: {
 			name: 'Compozz',
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
 		usableAsTool: true,
-		properties: [
-			// Node properties which the user gets displayed and
-			// can change on the node.
+		credentials: [
 			{
-				displayName: 'My String',
-				name: 'myString',
+				name: 'compozzApi',
+				required: true,
+			},
+		],
+		properties: [
+			// Resource
+			{
+				displayName: 'Resource',
+				name: 'resource',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Record',
+						value: 'record',
+					},
+				],
+				default: 'record',
+			},
+			// Operations
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['record'],
+					},
+				},
+				options: [
+					{
+						name: 'Create',
+						value: 'create',
+						description: 'Create a new record',
+						action: 'Create a record',
+					},
+					{
+						name: 'Get Many',
+						value: 'getMany',
+						description: 'Retrieve multiple records',
+						action: 'Get many records',
+					},
+					{
+						name: 'Update',
+						value: 'update',
+						description: 'Update an existing record',
+						action: 'Update a record',
+					},
+				],
+				default: 'create',
+			},
+			// Common fields
+			{
+				displayName: 'Workspace',
+				name: 'workspace',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The name of the workspace',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+					},
+				},
+			},
+			{
+				displayName: 'Object',
+				name: 'object',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The name of the object',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+					},
+				},
+			},
+			// Record Key (for update)
+			{
+				displayName: 'Record Key',
+				name: 'recordKey',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The key of the record to update',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['update'],
+					},
+				},
+			},
+			// Fields (for create and update)
+			{
+				displayName: 'Fields',
+				name: 'fields',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+				},
+				default: {},
+				placeholder: 'Add Field',
+				description: 'Fields to set on the record',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['create', 'update'],
+					},
+				},
+				options: [
+					{
+						name: 'fieldValues',
+						displayName: 'Field',
+						values: [
+							{
+								displayName: 'Field Name',
+								name: 'name',
+								type: 'string',
+								default: '',
+								description: 'Name of the field',
+							},
+							{
+								displayName: 'Field Value',
+								name: 'value',
+								type: 'string',
+								default: '',
+								description: 'Value of the field',
+							},
+						],
+					},
+				],
+			},
+			// Fields to retrieve (for getMany)
+			{
+				displayName: 'Fields to Retrieve',
+				name: 'fieldsToRetrieve',
 				type: 'string',
 				default: '',
-				placeholder: 'Placeholder value',
-				description: 'The description text',
+				placeholder: 'field1, field2, field3',
+				description: 'Comma-separated list of field names to retrieve (leave empty for all)',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['getMany'],
+					},
+				},
+			},
+			// Filters (for getMany)
+			{
+				displayName: 'Filters',
+				name: 'filters',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+				},
+				default: {},
+				placeholder: 'Add Filter',
+				description: 'Filters to apply when retrieving records',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['getMany'],
+					},
+				},
+				options: [
+					{
+						name: 'filterValues',
+						displayName: 'Filter',
+						values: [
+							{
+								displayName: 'Field Name',
+								name: 'fieldName',
+								type: 'string',
+								default: '',
+								description: 'Name of the field to filter on',
+							},
+							{
+								displayName: 'Field Value',
+								name: 'fieldValue',
+								type: 'string',
+								default: '',
+								description: 'Value to filter by',
+							},
+							{
+								displayName: 'Value as Boolean',
+								name: 'valueAsBool',
+								type: 'boolean',
+								default: false,
+								description: 'Whether to treat the value as a boolean',
+							},
+						],
+					},
+				],
 			},
 		],
 	};
 
-	// The function below is responsible for actually doing whatever this node
-	// is supposed to do. In this case, we're just appending the `myString` property
-	// with whatever the user has entered.
-	// You can make async calls and use `await`.
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
+		const returnData: INodeExecutionData[] = [];
 
-		let item: INodeExecutionData;
-		let myString: string;
+		const credentials = await this.getCredentials('compozzApi');
+		const baseUrl = (credentials.baseUrl as string).replace(/\/$/, '');
 
-		// Iterates over all input items and add the key "myString" with the
-		// value the parameter "myString" resolves to.
-		// (This could be a different value for each item in case it contains an expression)
-		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+		// Get access token (with caching)
+		const accessToken = await getAccessToken.call(this, baseUrl, credentials);
+
+		const resource = this.getNodeParameter('resource', 0) as string;
+		const operation = this.getNodeParameter('operation', 0) as string;
+
+		for (let i = 0; i < items.length; i++) {
 			try {
-				myString = this.getNodeParameter('myString', itemIndex, '') as string;
-				item = items[itemIndex];
+				let responseData: IDataObject | IDataObject[];
 
-				item.json.myString = myString;
-			} catch (error) {
-				// This node should never fail but we want to showcase how
-				// to handle errors.
-				if (this.continueOnFail()) {
-					items.push({ json: this.getInputData(itemIndex)[0].json, error, pairedItem: itemIndex });
-				} else {
-					// Adding `itemIndex` allows other workflows to handle this error
-					if (error.context) {
-						// If the error thrown already contains the context property,
-						// only append the itemIndex
-						error.context.itemIndex = itemIndex;
-						throw error;
+				if (resource === 'record') {
+					const workspace = this.getNodeParameter('workspace', i) as string;
+					const object = this.getNodeParameter('object', i) as string;
+
+					if (operation === 'create') {
+						responseData = await createRecord.call(
+							this,
+							baseUrl,
+							accessToken,
+							workspace,
+							object,
+							i,
+						);
+					} else if (operation === 'getMany') {
+						responseData = await getRecords.call(
+							this,
+							baseUrl,
+							accessToken,
+							workspace,
+							object,
+							i,
+						);
+					} else if (operation === 'update') {
+						const recordKey = this.getNodeParameter('recordKey', i) as string;
+						responseData = await updateRecord.call(
+							this,
+							baseUrl,
+							accessToken,
+							workspace,
+							object,
+							recordKey,
+							i,
+						);
+					} else {
+						throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
+							itemIndex: i,
+						});
 					}
-					throw new NodeOperationError(this.getNode(), error, {
-						itemIndex,
-					});
+
+					const executionData = this.helpers.constructExecutionMetaData(
+						this.helpers.returnJsonArray(responseData),
+						{ itemData: { item: i } },
+					);
+					returnData.push(...executionData);
 				}
+			} catch (error) {
+				if (this.continueOnFail()) {
+					returnData.push({ json: { error: error.message }, pairedItem: { item: i } });
+					continue;
+				}
+				throw error;
 			}
 		}
 
-		return [items];
+		return [returnData];
 	}
+}
+
+/**
+ * Get access token with caching
+ */
+async function getAccessToken(
+	this: IExecuteFunctions,
+	baseUrl: string,
+	credentials: IDataObject,
+): Promise<string> {
+	const cacheKey = `${credentials.username}@${baseUrl}`;
+	const cached = tokenCache.get(cacheKey);
+
+	// Return cached token if still valid (with 1 minute buffer)
+	if (cached && cached.expiresAt > Date.now() + 60000) {
+		return cached.token;
+	}
+
+	// Fetch new token
+	const options: IHttpRequestOptions = {
+		method: 'POST',
+		url: `${baseUrl}/auth/login`,
+		headers: {
+			'Content-Type': 'application/json',
+			Accept: 'application/json',
+		},
+		body: {
+			username: credentials.username,
+			password: credentials.password,
+		},
+		json: true,
+	};
+
+	const response = await this.helpers.httpRequest(options);
+
+	if (!response.access_token) {
+		throw new NodeOperationError(this.getNode(), 'Failed to obtain access token from Compozz API');
+	}
+
+	// Cache token for 5 minutes (assuming 1 hour expiry)
+	tokenCache.set(cacheKey, {
+		token: response.access_token,
+		expiresAt: Date.now() + REFRESH_TOKEN_INTERVAL,
+	});
+
+	return response.access_token;
+}
+
+/**
+ * Create a record
+ */
+async function createRecord(
+	this: IExecuteFunctions,
+	baseUrl: string,
+	accessToken: string,
+	workspace: string,
+	object: string,
+	itemIndex: number,
+): Promise<IDataObject> {
+	const fieldsInput = this.getNodeParameter('fields', itemIndex) as {
+		fieldValues?: Array<{ name: string; value: string }>;
+	};
+
+	const options: IHttpRequestOptions = {
+		method: 'POST',
+		url: `${baseUrl}/data/records`,
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/json',
+		},
+		body: {
+			workspace,
+			object,
+			fieldByName: true,
+			fields: fieldsInput.fieldValues,
+			linkByValue: true,
+		},
+		json: true,
+		returnFullResponse: true,
+	};
+
+	const response = await this.helpers.httpRequest(options);
+
+	if (response.statusCode !== 201) {
+		throw new NodeOperationError(this.getNode(), response.body, {
+			itemIndex: itemIndex,
+		});
+	}
+
+	return JSON.parse(JSON.stringify(response.body));
+}
+
+/**
+ * Retrieve records
+ */
+async function getRecords(
+	this: IExecuteFunctions,
+	baseUrl: string,
+	accessToken: string,
+	workspace: string,
+	object: string,
+	itemIndex: number,
+): Promise<IDataObject> {
+	const fieldsToRetrieve = this.getNodeParameter('fieldsToRetrieve', itemIndex) as string;
+	const filtersInput = this.getNodeParameter('filters', itemIndex) as {
+		filterValues?: Array<{ fieldName: string; fieldValue: string; valueAsBool: boolean }>;
+	};
+
+	// Parse fields to retrieve
+	const fields = fieldsToRetrieve
+		? fieldsToRetrieve.split(',').map((f) => f.trim()).filter((f) => f)
+		: [];
+
+	const filters: Record<string, any> = {};
+	for (const filter of filtersInput.filterValues || []) {
+		let fieldValue: any = filter.fieldValue;
+		if (filter.valueAsBool) {
+			fieldValue = filter.fieldValue.toLowerCase() === 'true';
+		}
+		filters[filter.fieldName] = fieldValue;
+	}
+
+	const body: IDataObject = {
+		workspace,
+		object,
+		fieldByName: true,
+		filters: filters,
+	};
+
+	if (fields.length > 0) {
+		body.fields = fields;
+	}
+
+	const options: IHttpRequestOptions = {
+		method: 'POST',
+		url: `${baseUrl}/data/records/paths?mode=simple`,
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/json',
+		},
+		body,
+		json: true,
+		returnFullResponse: true,
+	};
+
+	const response = await this.helpers.httpRequest(options);
+
+	if (response.statusCode !== 200) {
+		throw new NodeOperationError(this.getNode(), response.response, {
+			itemIndex: itemIndex,
+		});
+	}
+
+	// Ensure we only return serializable data
+	return JSON.parse(JSON.stringify(response.body));
+}
+
+/**
+ * Update a record
+ */
+async function updateRecord(
+	this: IExecuteFunctions,
+	baseUrl: string,
+	accessToken: string,
+	workspace: string,
+	object: string,
+	recordKey: string,
+	itemIndex: number,
+): Promise<IDataObject> {
+	const fieldsInput = this.getNodeParameter('fields', itemIndex) as {
+		fieldValues?: Array<{ name: string; value: string }>;
+	};
+
+	const options: IHttpRequestOptions = {
+		method: 'PATCH',
+		url: `${baseUrl}/data/records`,
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/json',
+		},
+		body: {
+			workspace,
+			object,
+			recordKey,
+			fieldByName: true,
+			fields: fieldsInput.fieldValues,
+		},
+		json: true,
+		returnFullResponse: true,
+	};
+
+	const response = await this.helpers.httpRequest(options);
+
+	if (response.statusCode !== 204) {
+		throw new NodeOperationError(this.getNode(), response.body, {
+			itemIndex: itemIndex,
+		});
+	}
+
+	return {};
 }
