@@ -168,6 +168,20 @@ export class Compozz implements INodeType {
 					},
 				],
 			},
+			// Link By Value (for create)
+			{
+				displayName: 'Link By Value',
+				name: 'linkByValue',
+				type: 'boolean',
+				default: true,
+				description: 'Whether to link records by the value of the field instead of by the record key',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['create'],
+					},
+				},
+			},
 			// Fields to retrieve (for getMany)
 			{
 				displayName: 'Fields to Retrieve',
@@ -368,6 +382,7 @@ async function createRecord(
 	const fieldsInput = this.getNodeParameter('fields', itemIndex) as {
 		fieldValues?: Array<{ name: string; value: string }>;
 	};
+	const linkByValue = this.getNodeParameter('linkByValue', itemIndex, true) as boolean;
 
 	const options: IHttpRequestOptions = {
 		method: 'POST',
@@ -381,7 +396,7 @@ async function createRecord(
 			object,
 			fieldByName: true,
 			fields: fieldsInput.fieldValues,
-			linkByValue: true,
+			linkByValue,
 		},
 		json: true,
 		returnFullResponse: true,
