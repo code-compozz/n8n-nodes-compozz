@@ -132,6 +132,95 @@ The Compozz node allows you to manage records in your Compozz workspaces.
 5. Enter the **Record Key** of the record to update
 6. Add the fields you want to update with their new values
 
+## Release / Publishing
+
+### Prerequisites
+
+- Node.js version 20.x or later (required for `n8n-node release`)
+- npm account with 2FA enabled or granular access token with bypass 2FA enabled
+- npm authentication token configured: `npm config set //registry.npmjs.org/:_authToken=<YOUR_TOKEN>`
+
+Before starting the release process, ensure you're using Node.js 20:
+```bash
+nvm use 20
+```
+
+### Release Process
+
+> **⚠️ Warning**: Before releasing, ensure that:
+> - You are on the `master` branch (or `main` branch)
+> - All changes are committed
+> - All commits are pushed to the remote repository
+> - Your working directory is clean (no uncommitted changes)
+
+The release process is handled automatically by `npm run release`, which will:
+
+1. Run linting and build checks
+2. Determine the appropriate version bump (patch, minor, or major)
+3. Update the version in `package.json`
+4. Create a git commit with the version bump
+5. Create a git tag for the new version
+6. Publish to npm
+7. Push commits and tags to the remote repository
+
+**Do not** use `npm version` commands manually, as `npm run release` handles version management automatically.
+
+### Steps
+
+1. Ensure you're on the master branch and everything is committed and pushed:
+   ```bash
+   git checkout master
+   git status  # Should show "working tree clean"
+   git pull origin master
+   ```
+
+2. Switch to Node.js 20 (if using nvm):
+   ```bash
+   nvm use 20
+   ```
+
+3. Run the release command (this handles build and publish automatically):
+   ```bash
+   npm run release
+   ```
+   
+   **Note**: Use `npm run release` instead of manually running `npm run build` and `npm publish`. The release script handles everything automatically.
+
+4. Follow the interactive prompts to select the version bump type (patch/minor/major)
+
+5. The release script will handle the rest automatically
+
+### Manual Publishing (Not Recommended)
+
+> **⚠️ Do not use this method**. Always use `npm run release` instead of manually running `npm run build` and `npm publish`.
+
+If you absolutely need to publish manually (not recommended), you can use:
+
+```bash
+npm run build
+npm publish
+```
+
+However, this will not update git tags or version numbers automatically, and may cause issues with the release process.
+
+## Updating the Node on Your n8n Server
+
+To update the Compozz node to the latest version on your n8n server:
+
+1. Go to the n8n server
+2. Install or update the package:
+   ```bash
+   npm install n8n-nodes-compozz@latest
+   ```
+3. Go to the n8n launch directory
+4. Restart n8n using Docker Compose:
+   ```bash
+   docker compose restart
+   ```
+5. Go to the n8n web interface and refresh the page and go to a Compozz node. On settings tab, you should see a button to "Update Node". Click it and wait for the node to be updated.
+
+After restarting, the node will be loaded with the latest version. Existing workflows will continue to work and will use the new version of the node.
+
 ## Compatibility
 
 - n8n version: 1.0.0 or later

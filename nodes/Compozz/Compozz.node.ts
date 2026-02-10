@@ -128,6 +128,20 @@ export class Compozz implements INodeType {
 					},
 				},
 			},
+			// Link By Value (for create)
+			{
+				displayName: 'Link By Value',
+				name: 'linkByValue',
+				type: 'boolean',
+				default: true,
+				description: 'Whether to link records by the value of the field instead of by the record key',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['create'],
+					},
+				},
+			},
 			// Fields (for create and update)
 			{
 				displayName: 'Fields',
@@ -167,20 +181,6 @@ export class Compozz implements INodeType {
 						],
 					},
 				],
-			},
-			// Link By Value (for create)
-			{
-				displayName: 'Link By Value',
-				name: 'linkByValue',
-				type: 'boolean',
-				default: true,
-				description: 'Whether to link records by the value of the field instead of by the record key',
-				displayOptions: {
-					show: {
-						resource: ['record'],
-						operation: ['create'],
-					},
-				},
 			},
 			// Fields to retrieve (for getMany)
 			{
