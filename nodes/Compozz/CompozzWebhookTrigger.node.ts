@@ -27,7 +27,7 @@ export class CompozzWebhookTrigger implements INodeType {
 			{
 				name: 'default',
 				httpMethod: 'POST',
-				responseMode: 'onReceived',
+				responseMode: 'responseNode',
 				path: '={{ $parameter["tenantId"] ? `compozz-webhook-${$parameter["tenantId"]}` : "compozz-webhook" }}',
 			},
 		],
@@ -70,9 +70,10 @@ export class CompozzWebhookTrigger implements INodeType {
 		try {
 			const credentials = await this.getCredentials('compozzApi');
 			if (!credentials) {
-				return {
-					responseBody: { error: 'Compozz API credentials are required' },
-				} as IWebhookResponseData;
+				throw new NodeApiError(this.getNode(), {
+					message: 'Compozz API credentials are required',
+					httpCode: 401,
+				});
 			}
 
 			const baseUrl = (credentials.baseUrl as string).replace(/\/$/, '');
@@ -91,9 +92,10 @@ export class CompozzWebhookTrigger implements INodeType {
 			);
 
 			if (!isValid) {
-				return {
-					responseBody: { error: 'Invalid webhook signature' },
-				} as IWebhookResponseData;
+				throw new NodeApiError(this.getNode(), {
+					message: 'Invalid webhook signature',
+					httpCode: 401,
+				});
 			}
 
 			// Verify tenant ID isolation: ensure received tenantId matches configured tenantId
@@ -101,16 +103,21 @@ export class CompozzWebhookTrigger implements INodeType {
 			const receivedTenantId = tenantId || '';
 
 			if (receivedTenantId !== configuredTenantId) {
-				return {
-					responseBody: {
-						error: 'Tenant ID mismatch: webhook tenant does not match configured tenant',
-					},
-				} as IWebhookResponseData;
+				throw new NodeApiError(this.getNode(), {
+					message: 'Tenant ID mismatch: webhook tenant does not match configured tenant',
+					httpCode: 403,
+				});
 			}
 		} catch (error) {
-			return {
-				responseBody: { error: `Signature validation failed: ${error.message}` },
-			} as IWebhookResponseData;
+			// Si c'est déjà une NodeApiError, la relancer
+			if (error instanceof NodeApiError) {
+				throw error;
+			}
+			// Sinon, créer une nouvelle erreur
+			throw new NodeApiError(this.getNode(), {
+				message: `Signature validation failed: ${error.message}`,
+				httpCode: 500,
+			});
 		}
 
 		// Return webhook data
