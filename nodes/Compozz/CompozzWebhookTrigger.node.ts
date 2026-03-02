@@ -87,7 +87,7 @@ export class CompozzWebhookTrigger implements INodeType {
 					this.helpers,
 					baseUrl,
 					credentials,
-					false, // Don't use cache for webhook (each request is independent)
+					true, // Use cache to reuse token (same as Compozz node)
 					true, // Use NodeApiError
 				);
 			} catch (error: unknown) {
@@ -194,14 +194,30 @@ async function validateSignatureCall(
 	} catch (error: unknown) {
 		// If it's an authorization error (401), propagate it so we can see the real issue
 		const errorObj = error as IDataObject;
-		if (errorObj.statusCode === 401 || errorObj.httpCode === 401) {
-			const errorMessage =
-				errorObj.message && typeof errorObj.message === 'string'
-					? errorObj.message
-					: 'Invalid credentials';
+		const statusCode = errorObj.statusCode || errorObj.httpCode;
+		
+		if (statusCode === 401 || statusCode === 403) {
+			// Extract error message from response body if available
+			let errorMessage = 'Invalid credentials';
+			if (errorObj.response) {
+				const responseBody = errorObj.response as IDataObject;
+				if (responseBody.message && typeof responseBody.message === 'string') {
+					errorMessage = responseBody.message;
+				} else if (responseBody.error && typeof responseBody.error === 'string') {
+					errorMessage = responseBody.error;
+				}
+			} else if (errorObj.message && typeof errorObj.message === 'string') {
+				errorMessage = errorObj.message;
+			}
+			
 			throw new NodeApiError(this.getNode(), {
-				message: `Authorization failed - please check your credentials: ${errorMessage}`,
-				httpCode: 401,
+				message: `Authorization failed - please check your credentials and ensure your account has admin permissions: ${errorMessage}`,
+				httpCode: statusCode as number,
+			});
+		} else if (statusCode !== 200) {
+			throw new NodeApiError(this.getNode(), {
+				message: `Webhook validation failed: ${JSON.stringify(errorObj.response)}`,
+				httpCode: statusCode as number,
 			});
 		}
 		// For other errors, return false (signature invalid)
