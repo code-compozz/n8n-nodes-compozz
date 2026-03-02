@@ -7,15 +7,7 @@ import type {
 	IHttpRequestOptions,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
-
-// Token cache to avoid re-authenticating for each item
-interface TokenCache {
-	token: string;
-	expiresAt: number;
-}
-
-const REFRESH_TOKEN_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const tokenCache = new Map<string, TokenCache>();
+import { getAccessToken } from './utils';
 
 export class Compozz implements INodeType {
 	description: INodeTypeDescription = {
@@ -320,7 +312,14 @@ export class Compozz implements INodeType {
 		const baseUrl = (credentials.baseUrl as string).replace(/\/$/, '');
 
 		// Get access token (with caching)
-		const accessToken = await getAccessToken.call(this, baseUrl, credentials);
+		const accessToken = await getAccessToken(
+			this.getNode(),
+			this.helpers,
+			baseUrl,
+			credentials,
+			true, // Use cache
+			false, // Use NodeOperationError
+		);
 
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
@@ -410,52 +409,6 @@ export class Compozz implements INodeType {
 
 		return [returnData];
 	}
-}
-
-/**
- * Get access token with caching
- */
-async function getAccessToken(
-	this: IExecuteFunctions,
-	baseUrl: string,
-	credentials: IDataObject,
-): Promise<string> {
-	const cacheKey = `${credentials.username}@${baseUrl}`;
-	const cached = tokenCache.get(cacheKey);
-
-	// Return cached token if still valid (with 1 minute buffer)
-	if (cached && cached.expiresAt > Date.now() + 60000) {
-		return cached.token;
-	}
-
-	// Fetch new token
-	const options: IHttpRequestOptions = {
-		method: 'POST',
-		url: `${baseUrl}/auth/login`,
-		headers: {
-			'Content-Type': 'application/json',
-			Accept: 'application/json',
-		},
-		body: {
-			username: credentials.username,
-			password: credentials.password,
-		},
-		json: true,
-	};
-
-	const response = await this.helpers.httpRequest(options);
-
-	if (!response.access_token) {
-		throw new NodeOperationError(this.getNode(), 'Failed to obtain access token from Compozz API');
-	}
-
-	// Cache token for 5 minutes (assuming 1 hour expiry)
-	tokenCache.set(cacheKey, {
-		token: response.access_token,
-		expiresAt: Date.now() + REFRESH_TOKEN_INTERVAL,
-	});
-
-	return response.access_token;
 }
 
 /**

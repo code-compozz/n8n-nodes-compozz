@@ -7,6 +7,7 @@ import type {
 	IHttpRequestOptions,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeApiError } from 'n8n-workflow';
+import { getAccessToken } from './utils';
 
 export class CompozzWebhookTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -79,7 +80,14 @@ export class CompozzWebhookTrigger implements INodeType {
 			const baseUrl = (credentials.baseUrl as string).replace(/\/$/, '');
 
 			// Get access token
-			const accessToken = await getAccessToken.call(this, baseUrl, credentials);
+			const accessToken = await getAccessToken(
+				this.getNode(),
+				this.helpers,
+				baseUrl,
+				credentials,
+				false, // Don't use cache for webhook (each request is independent)
+				true, // Use NodeApiError
+			);
 
 			// Validate signature
 			const isValid = await validateSignatureCall.call(
@@ -142,38 +150,6 @@ export class CompozzWebhookTrigger implements INodeType {
 	}
 }
 
-/**
- * Get access token for validation
- */
-async function getAccessToken(
-	this: IWebhookFunctions,
-	baseUrl: string,
-	credentials: IDataObject,
-): Promise<string> {
-	const options: IHttpRequestOptions = {
-		method: 'POST',
-		url: `${baseUrl}/auth/login`,
-		headers: {
-			'Content-Type': 'application/json',
-			Accept: 'application/json',
-		},
-		body: {
-			username: credentials.username,
-			password: credentials.password,
-		},
-		json: true,
-	};
-
-	const response = await this.helpers.httpRequest(options);
-
-	if (!response.access_token) {
-		throw new NodeApiError(this.getNode(), {
-			message: 'Failed to obtain access token from Compozz API',
-		});
-	}
-
-	return response.access_token as string;
-}
 
 /**
  * Validate webhook signature using the validation endpoint
