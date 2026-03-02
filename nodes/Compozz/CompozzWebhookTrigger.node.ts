@@ -90,10 +90,12 @@ export class CompozzWebhookTrigger implements INodeType {
 					false, // Don't use cache for webhook (each request is independent)
 					true, // Use NodeApiError
 				);
-			} catch (error: any) {
+			} catch (error: unknown) {
 				// If getAccessToken fails, it's likely a credentials issue
+				const errorMessage =
+					error instanceof Error ? error.message : 'Please check your credentials';
 				throw new NodeApiError(this.getNode(), {
-					message: `Failed to authenticate with Compozz API: ${error.message || 'Please check your credentials'}`,
+					message: `Failed to authenticate with Compozz API: ${errorMessage}`,
 					httpCode: 401,
 				});
 			}
@@ -189,11 +191,16 @@ async function validateSignatureCall(
 	try {
 		const response = await this.helpers.httpRequest(options);
 		return response.valid === true;
-	} catch (error: any) {
+	} catch (error: unknown) {
 		// If it's an authorization error (401), propagate it so we can see the real issue
-		if (error.statusCode === 401 || error.httpCode === 401) {
+		const errorObj = error as IDataObject;
+		if (errorObj.statusCode === 401 || errorObj.httpCode === 401) {
+			const errorMessage =
+				errorObj.message && typeof errorObj.message === 'string'
+					? errorObj.message
+					: 'Invalid credentials';
 			throw new NodeApiError(this.getNode(), {
-				message: `Authorization failed - please check your credentials: ${error.message || 'Invalid credentials'}`,
+				message: `Authorization failed - please check your credentials: ${errorMessage}`,
 				httpCode: 401,
 			});
 		}
