@@ -11,7 +11,7 @@ const REFRESH_TOKEN_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const tokenCache = new Map<string, TokenCache>();
 
 interface HttpRequestHelper {
-	httpRequest(options: IHttpRequestOptions): Promise<any>;
+	httpRequest(options: IHttpRequestOptions): Promise<IDataObject>;
 }
 
 /**
@@ -63,13 +63,15 @@ export async function getAccessToken(
 		}
 	}
 
+	const accessToken = response.access_token as string;
+
 	// Cache token for 5 minutes (assuming 1 hour expiry)
 	if (useCache) {
 		tokenCache.set(cacheKey, {
-			token: response.access_token,
+			token: accessToken,
 			expiresAt: Date.now() + REFRESH_TOKEN_INTERVAL,
 		});
 	}
 
-	return response.access_token as string;
+	return accessToken;
 }
