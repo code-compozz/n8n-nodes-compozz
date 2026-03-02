@@ -50,6 +50,10 @@ export class Compozz implements INodeType {
 						name: 'Record',
 						value: 'record',
 					},
+					{
+						name: 'Webhook',
+						value: 'webhook',
+					},
 				],
 				default: 'record',
 			},
@@ -85,6 +89,27 @@ export class Compozz implements INodeType {
 					},
 				],
 				default: 'create',
+			},
+			// Webhook operations
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['webhook'],
+					},
+				},
+				options: [
+					{
+						name: 'Validate',
+						value: 'validate',
+						description: 'Validate a webhook signature',
+						action: 'Validate webhook signature',
+					},
+				],
+				default: 'validate',
 			},
 			// Common fields
 			{
@@ -244,6 +269,46 @@ export class Compozz implements INodeType {
 					},
 				],
 			},
+			// Webhook fields
+			{
+				displayName: 'Signature',
+				name: 'signature',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The webhook signature from X-Compozz-Signature header',
+				displayOptions: {
+					show: {
+						resource: ['webhook'],
+					},
+				},
+			},
+			{
+				displayName: 'Payload',
+				name: 'payload',
+				type: 'json',
+				required: true,
+				default: '={{ $json }}',
+				description: 'The webhook payload (JSON object)',
+				displayOptions: {
+					show: {
+						resource: ['webhook'],
+					},
+				},
+			},
+			{
+				displayName: 'Tenant ID',
+				name: 'tenantId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The tenant ID from X-Compozz-Tenant header',
+				displayOptions: {
+					show: {
+						resource: ['webhook'],
+					},
+				},
+			},
 		],
 	};
 
@@ -308,6 +373,31 @@ export class Compozz implements INodeType {
 						{ itemData: { item: i } },
 					);
 					returnData.push(...executionData);
+				} else if (resource === 'webhook') {
+					if (operation === 'validate') {
+						const signature = this.getNodeParameter('signature', i) as string;
+						const payload = this.getNodeParameter('payload', i) as IDataObject;
+						const tenantId = this.getNodeParameter('tenantId', i) as string;
+
+						responseData = await validateWebhookSignature.call(
+							this,
+							baseUrl,
+							accessToken,
+							signature,
+							payload,
+							tenantId,
+						);
+
+						const executionData = this.helpers.constructExecutionMetaData(
+							this.helpers.returnJsonArray([responseData]),
+							{ itemData: { item: i } },
+						);
+						returnData.push(...executionData);
+					} else {
+						throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
+							itemIndex: i,
+						});
+					}
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
@@ -523,4 +613,43 @@ async function updateRecord(
 	}
 
 	return {};
+}
+
+/**
+ * Validate webhook signature using the validation endpoint
+ */
+async function validateWebhookSignature(
+	this: IExecuteFunctions,
+	baseUrl: string,
+	accessToken: string,
+	signature: string,
+	payload: IDataObject,
+	tenantId: string,
+): Promise<IDataObject> {
+	const options: IHttpRequestOptions = {
+		method: 'POST',
+		url: `${baseUrl}/admin/webhook/validate`,
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/json',
+		},
+		body: {
+			signature,
+			payload,
+			tenantId,
+		},
+		json: true,
+		returnFullResponse: true,
+	};
+
+	const response = await this.helpers.httpRequest(options);
+
+	if (response.statusCode !== 200) {
+		throw new NodeOperationError(
+			this.getNode(),
+			`Webhook validation failed: ${JSON.stringify(response.body)}`,
+		);
+	}
+
+	return response.body as IDataObject;
 }

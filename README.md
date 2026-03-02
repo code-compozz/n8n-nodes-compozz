@@ -48,6 +48,7 @@ The Compozz node allows you to manage records in your Compozz workspaces.
 | Resource | Description |
 |----------|-------------|
 | Record | Manage records within Compozz objects |
+| Webhook | Webhook signature validation |
 
 #### Operations
 
@@ -58,6 +59,12 @@ The Compozz node allows you to manage records in your Compozz workspaces.
 | Create | Create a new record | `POST /data/records` |
 | Get Many | Retrieve multiple records | `POST /data/records/paths?mode=simple` |
 | Update | Update an existing record | `PATCH /data/records` |
+
+##### Webhook
+
+| Operation | Description | API Endpoint |
+|-----------|-------------|--------------|
+| Validate | Validate a webhook signature | `POST /admin/webhook/validate` |
 
 ### Parameters
 
@@ -70,9 +77,10 @@ The Compozz node allows you to manage records in your Compozz workspaces.
 
 #### Create Record
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| Fields | Collection | No | Field name/value pairs to set on the record |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| Link By Value | Boolean | No | `true` | Whether to link records by the value of the field instead of by the record key |
+| Fields | Collection | No | - | Field name/value pairs to set on the record |
 
 **Fields Collection:**
 
@@ -103,6 +111,55 @@ The Compozz node allows you to manage records in your Compozz workspaces.
 | Record Key | String | Yes | The key of the record to update |
 | Fields | Collection | No | Field name/value pairs to update on the record |
 
+#### Validate Webhook Signature
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| Signature | String | Yes | The webhook signature from `X-Compozz-Signature` header |
+| Payload | JSON | Yes | The webhook payload (defaults to `{{ $json }}`) |
+| Tenant ID | String | Yes | The tenant ID from `X-Compozz-Tenant` header |
+
+---
+
+### Compozz Webhook Trigger
+
+A trigger node that starts a workflow when a webhook from Compozz is received.
+
+#### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| Tenant ID | String | Yes | - | Your Compozz tenant ID (used to generate unique webhook URL) |
+
+**Note**: Compozz API credentials are required for this trigger node.
+
+#### Webhook URL
+
+The webhook URL is dynamically generated based on your tenant ID:
+```
+https://<your-n8n-instance>/webhook/compozz-webhook-<tenantId>
+```
+
+#### Output Data
+
+The trigger outputs the webhook payload along with extracted headers:
+
+| Field | Description |
+|-------|-------------|
+| `...body` | All fields from the webhook payload |
+| `_headers.signature` | Value from `X-Compozz-Signature` header |
+| `_headers.tenantId` | Value from `X-Compozz-Tenant` header |
+| `_headers.action` | Value from `X-Compozz-Action` header |
+| `_headers.eventId` | Value from `X-Compozz-Event-ID` header |
+| `_headers.timestamp` | Value from `X-Compozz-Timestamp` header |
+
+#### Signature Validation
+
+Signature validation is **always enabled** and mandatory. The trigger will:
+1. Require Compozz API credentials to be configured
+2. Call the `POST /admin/webhook/validate` endpoint to verify the signature
+3. Reject webhooks with invalid signatures (returns error response)
+
 ## Usage Examples
 
 ### Create a Record
@@ -131,6 +188,23 @@ The Compozz node allows you to manage records in your Compozz workspaces.
 4. Enter your **Workspace** and **Object** names
 5. Enter the **Record Key** of the record to update
 6. Add the fields you want to update with their new values
+
+### Validate a Webhook Signature
+
+1. Add the Compozz node to your workflow (after a Webhook node)
+2. Select **Webhook** as the resource
+3. Select **Validate** as the operation
+4. Map the signature from `X-Compozz-Signature` header
+5. Pass the payload (defaults to incoming JSON)
+6. Map the tenant ID from `X-Compozz-Tenant` header
+
+### Use the Webhook Trigger
+
+1. Add the **Compozz Webhook Trigger** node as the start of your workflow
+2. Configure **Compozz API credentials** (required)
+3. Enter your **Tenant ID**
+4. Copy the generated webhook URL and configure it in Compozz
+5. The workflow will trigger when Compozz sends a webhook (signature validation is automatic)
 
 ## Release / Publishing
 

@@ -40,7 +40,8 @@
 			"dist/credentials/CompozzApi.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/Compozz/Compozz.node.js"
+			"dist/nodes/Compozz/Compozz.node.js",
+			"dist/nodes/Compozz/WebhookTrigger.node.js"
 		]
 	},
 	"devDependencies": {
