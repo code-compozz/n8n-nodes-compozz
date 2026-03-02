@@ -77,17 +77,26 @@ export class CompozzWebhookTrigger implements INodeType {
 				});
 			}
 
-			const baseUrl = (credentials.baseUrl as string).replace(/\/$/, '');
+			const baseUrl = ((credentials.baseUrl as string) || 'https://app.compozz.com').replace(/\/$/, '');
 
 			// Get access token
-			const accessToken = await getAccessToken(
-				this.getNode(),
-				this.helpers,
-				baseUrl,
-				credentials,
-				false, // Don't use cache for webhook (each request is independent)
-				true, // Use NodeApiError
-			);
+			let accessToken: string;
+			try {
+				accessToken = await getAccessToken(
+					this.getNode(),
+					this.helpers,
+					baseUrl,
+					credentials,
+					false, // Don't use cache for webhook (each request is independent)
+					true, // Use NodeApiError
+				);
+			} catch (error: any) {
+				// If getAccessToken fails, it's likely a credentials issue
+				throw new NodeApiError(this.getNode(), {
+					message: `Failed to authenticate with Compozz API: ${error.message || 'Please check your credentials'}`,
+					httpCode: 401,
+				});
+			}
 
 			// Validate signature
 			const isValid = await validateSignatureCall.call(
@@ -180,7 +189,15 @@ async function validateSignatureCall(
 	try {
 		const response = await this.helpers.httpRequest(options);
 		return response.valid === true;
-	} catch {
+	} catch (error: any) {
+		// If it's an authorization error (401), propagate it so we can see the real issue
+		if (error.statusCode === 401 || error.httpCode === 401) {
+			throw new NodeApiError(this.getNode(), {
+				message: `Authorization failed - please check your credentials: ${error.message || 'Invalid credentials'}`,
+				httpCode: 401,
+			});
+		}
+		// For other errors, return false (signature invalid)
 		return false;
 	}
 }
