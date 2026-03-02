@@ -95,6 +95,18 @@ export class CompozzWebhookTrigger implements INodeType {
 					responseBody: { error: 'Invalid webhook signature' },
 				} as IWebhookResponseData;
 			}
+
+			// Verify tenant ID isolation: ensure received tenantId matches configured tenantId
+			const configuredTenantId = this.getNodeParameter('tenantId', 0) as string;
+			const receivedTenantId = tenantId || '';
+
+			if (receivedTenantId !== configuredTenantId) {
+				return {
+					responseBody: {
+						error: 'Tenant ID mismatch: webhook tenant does not match configured tenant',
+					},
+				} as IWebhookResponseData;
+			}
 		} catch (error) {
 			return {
 				responseBody: { error: `Signature validation failed: ${error.message}` },

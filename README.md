@@ -158,7 +158,10 @@ The trigger outputs the webhook payload along with extracted headers:
 Signature validation is **always enabled** and mandatory. The trigger will:
 1. Require Compozz API credentials to be configured
 2. Call the `POST /admin/webhook/validate` endpoint to verify the signature
-3. Reject webhooks with invalid signatures (returns error response)
+3. Verify that the received tenant ID matches the configured tenant ID (tenant isolation)
+4. Reject webhooks with invalid signatures or tenant mismatches (returns error response)
+
+**Security**: This ensures that each tenant can only receive webhooks for their own tenant ID, preventing cross-tenant data access.
 
 ## Usage Examples
 
