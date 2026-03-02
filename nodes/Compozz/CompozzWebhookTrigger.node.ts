@@ -196,31 +196,38 @@ async function validateSignatureCall(
 		const errorObj = error as IDataObject;
 		const statusCode = errorObj.statusCode || errorObj.httpCode;
 		
-		if (statusCode === 401 || statusCode === 403) {
-			// Extract error message from response body if available
-			let errorMessage = 'Invalid credentials';
-			if (errorObj.response) {
-				const responseBody = errorObj.response as IDataObject;
-				if (responseBody.message && typeof responseBody.message === 'string') {
-					errorMessage = responseBody.message;
-				} else if (responseBody.error && typeof responseBody.error === 'string') {
-					errorMessage = responseBody.error;
-				}
-			} else if (errorObj.message && typeof errorObj.message === 'string') {
-				errorMessage = errorObj.message;
+		// Extract detailed error information
+		let errorMessage = 'Invalid credentials';
+		let errorDetails: string | undefined;
+		
+		if (errorObj.response) {
+			const responseBody = errorObj.response as IDataObject;
+			if (responseBody.message && typeof responseBody.message === 'string') {
+				errorMessage = responseBody.message;
+			} else if (responseBody.error && typeof responseBody.error === 'string') {
+				errorMessage = responseBody.error;
 			}
+			errorDetails = JSON.stringify(responseBody);
+		} else if (errorObj.message && typeof errorObj.message === 'string') {
+			errorMessage = errorObj.message;
+		}
+		
+		if (statusCode === 401 || statusCode === 403) {
+			const fullMessage = errorDetails
+				? `Authorization failed - please check your credentials and ensure your account has admin permissions. API response: ${errorDetails}`
+				: `Authorization failed - please check your credentials and ensure your account has admin permissions: ${errorMessage}`;
 			
 			throw new NodeApiError(this.getNode(), {
-				message: `Authorization failed - please check your credentials and ensure your account has admin permissions: ${errorMessage}`,
+				message: fullMessage,
 				httpCode: statusCode as number,
 			});
-		} else if (statusCode !== 200) {
+		} else if (statusCode && statusCode !== 200) {
 			throw new NodeApiError(this.getNode(), {
-				message: `Webhook validation failed: ${JSON.stringify(errorObj.response)}`,
+				message: `Webhook validation failed (HTTP ${statusCode}): ${errorDetails || errorMessage}`,
 				httpCode: statusCode as number,
 			});
 		}
-		// For other errors, return false (signature invalid)
+		// For other errors (network, etc.), return false (signature invalid)
 		return false;
 	}
 }
