@@ -6,9 +6,9 @@ import type {
 	IDataObject,
 	IHttpRequestOptions,
 } from 'n8n-workflow';
-import { NodeConnectionTypes } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeApiError } from 'n8n-workflow';
 
-export class WebhookTrigger implements INodeType {
+export class CompozzWebhookTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Compozz Webhook Trigger',
 		name: 'compozzWebhookTrigger',
@@ -148,7 +148,9 @@ async function getAccessToken(
 	const response = await this.helpers.httpRequest(options);
 
 	if (!response.access_token) {
-		throw new Error('Failed to obtain access token from Compozz API');
+		throw new NodeApiError(this.getNode(), {
+			message: 'Failed to obtain access token from Compozz API',
+		});
 	}
 
 	return response.access_token as string;
@@ -183,7 +185,7 @@ async function validateSignatureCall(
 	try {
 		const response = await this.helpers.httpRequest(options);
 		return response.valid === true;
-	} catch (error) {
+	} catch {
 		return false;
 	}
 }

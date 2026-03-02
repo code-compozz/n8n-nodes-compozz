@@ -41,7 +41,7 @@
 		],
 		"nodes": [
 			"dist/nodes/Compozz/Compozz.node.js",
-			"dist/nodes/Compozz/WebhookTrigger.node.js"
+			"dist/nodes/Compozz/CompozzWebhookTrigger.node.js"
 		]
 	},
 	"devDependencies": {
