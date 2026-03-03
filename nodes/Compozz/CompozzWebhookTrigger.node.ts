@@ -101,12 +101,14 @@ export class CompozzWebhookTrigger implements INodeType {
 			}
 
 			// Validate signature
+			// Use raw JSON string to preserve exact bytes from compozz-data
+			const bodyJsonString = JSON.stringify(body);
 			const isValid = await validateSignatureCall.call(
 				this,
 				baseUrl,
 				accessToken,
 				signature || '',
-				body,
+				bodyJsonString,
 				tenantId || '',
 			);
 
@@ -128,11 +130,11 @@ export class CompozzWebhookTrigger implements INodeType {
 				});
 			}
 		} catch (error) {
-			// Si c'est déjà une NodeApiError, la relancer
+			// If it's already a NodeApiError, rethrow it
 			if (error instanceof NodeApiError) {
 				throw error;
 			}
-			// Sinon, créer une nouvelle erreur
+			// Otherwise, create a new error
 			throw new NodeApiError(this.getNode(), {
 				message: `Signature validation failed: ${error.message}`,
 				httpCode: 500,
@@ -170,9 +172,16 @@ async function validateSignatureCall(
 	baseUrl: string,
 	accessToken: string,
 	signature: string,
-	payload: IDataObject,
+	payload: string,
 	tenantId: string,
 ): Promise<boolean> {
+	// Send payload as raw JSON string to preserve exact bytes from compozz-data
+	// Construct the request body manually to embed payload as raw JSON (not parsed object)
+	// Go's json.RawMessage will preserve the exact bytes when deserializing
+	const escapedSignature = JSON.stringify(signature);
+	const escapedTenantId = JSON.stringify(tenantId);
+	const requestBody = `{"signature":${escapedSignature},"payload":${payload},"tenantId":${escapedTenantId}}`;
+	
 	const options: IHttpRequestOptions = {
 		method: 'POST',
 		url: `${baseUrl}/admin/webhook/validate`,
@@ -180,12 +189,8 @@ async function validateSignatureCall(
 			Authorization: `Bearer ${accessToken}`,
 			'Content-Type': 'application/json',
 		},
-		body: {
-			signature,
-			payload,
-			tenantId,
-		},
-		json: true,
+		body: requestBody,
+		json: false, // Send as raw string, not parsed JSON
 	};
 
 	try {
