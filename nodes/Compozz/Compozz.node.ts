@@ -105,12 +105,12 @@ export class Compozz implements INodeType {
 			},
 			// Common fields
 			{
-				displayName: 'Workspace',
+				displayName: 'Workspace name',
 				name: 'workspace',
 				type: 'string',
-				required: true,
+				required: false,
 				default: '',
-				description: 'The name of the workspace',
+				description: 'The name of the workspace (either name or key must be provided)',
 				displayOptions: {
 					show: {
 						resource: ['record'],
@@ -118,12 +118,38 @@ export class Compozz implements INodeType {
 				},
 			},
 			{
-				displayName: 'Object',
+				displayName: 'Workspace key',
+				name: 'workspaceKey',
+				type: 'string',
+				required: false,
+				default: '',
+				description: 'The key of the workspace (either name or key must be provided)',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+					},
+				},
+			},
+			{
+				displayName: 'Object name',
 				name: 'object',
 				type: 'string',
-				required: true,
+				required: false,
 				default: '',
-				description: 'The name of the object',
+				description: 'The name of the object (either name or key must be provided)',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+					},
+				},
+			},
+			{
+				displayName: 'Object key',
+				name: 'objectKey',
+				type: 'string',
+				required: false,
+				default: '',
+				description: 'The key of the object (either name or key must be provided)',
 				displayOptions: {
 					show: {
 						resource: ['record'],
@@ -198,6 +224,21 @@ export class Compozz implements INodeType {
 						],
 					},
 				],
+			},
+			// Keys of the records to retrieve (for getMany)
+			{
+				displayName: 'Keys of the records to retrieve',
+				name: 'recordKeys',
+				type: 'string',
+				default: '',
+				placeholder: 'key1, key2, key3',
+				description: 'Comma-separated list of keys of the records to retrieve (leave empty for all)',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['getMany'],
+					},
+				},
 			},
 			// Fields to retrieve (for getMany)
 			{
@@ -330,7 +371,28 @@ export class Compozz implements INodeType {
 
 				if (resource === 'record') {
 					const workspace = this.getNodeParameter('workspace', i) as string;
+					const workspaceKey = this.getNodeParameter('workspaceKey', i) as string;
 					const object = this.getNodeParameter('object', i) as string;
+					const objectKey = this.getNodeParameter('objectKey', i) as string;
+
+					// Validate that at least one of workspace name or key is provided
+					if (!workspace && !workspaceKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Either workspace name or workspace key must be provided',
+							{ itemIndex: i },
+						);
+					}
+
+					// Validate that at least one of object name or key is provided
+					if (!object && !objectKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Either object name or object key must be provided',
+							{ itemIndex: i },
+						);
+					}
+
 
 					if (operation === 'create') {
 						responseData = await createRecord.call(
@@ -338,7 +400,9 @@ export class Compozz implements INodeType {
 							baseUrl,
 							accessToken,
 							workspace,
+							workspaceKey,
 							object,
+							objectKey,
 							i,
 						);
 					} else if (operation === 'getMany') {
@@ -347,18 +411,20 @@ export class Compozz implements INodeType {
 							baseUrl,
 							accessToken,
 							workspace,
+							workspaceKey,
 							object,
+							objectKey,
 							i,
 						);
 					} else if (operation === 'update') {
-						const recordKey = this.getNodeParameter('recordKey', i) as string;
 						responseData = await updateRecord.call(
 							this,
 							baseUrl,
 							accessToken,
 							workspace,
+							workspaceKey,
 							object,
-							recordKey,
+							objectKey,
 							i,
 						);
 					} else {
@@ -418,14 +484,37 @@ async function createRecord(
 	this: IExecuteFunctions,
 	baseUrl: string,
 	accessToken: string,
-	workspace: string,
-	object: string,
+	workspaceName: string,
+	workspaceKey: string,
+	objectName: string,
+	objectKey: string,
 	itemIndex: number,
 ): Promise<IDataObject> {
+
 	const fieldsInput = this.getNodeParameter('fields', itemIndex) as {
 		fieldValues?: Array<{ name: string; value: string }>;
 	};
 	const linkByValue = this.getNodeParameter('linkByValue', itemIndex, true) as boolean;
+
+	const body: IDataObject = {
+		fieldByName: true,
+		fields: fieldsInput.fieldValues,
+		linkByValue,
+	};
+
+	// Add workspace/workspaceKey (use key if provided, otherwise name)
+	if (workspaceKey) {
+		body.workspaceKey = workspaceKey;
+	} else if (workspaceName) {
+		body.workspace = workspaceName;
+	}
+
+	// Add object/objectKey (use key if provided, otherwise name)
+	if (objectKey) {
+		body.objectKey = objectKey;
+	} else if (objectName) {
+		body.object = objectName;
+	}
 
 	const options: IHttpRequestOptions = {
 		method: 'POST',
@@ -434,13 +523,7 @@ async function createRecord(
 			Authorization: `Bearer ${accessToken}`,
 			'Content-Type': 'application/json',
 		},
-		body: {
-			workspace,
-			object,
-			fieldByName: true,
-			fields: fieldsInput.fieldValues,
-			linkByValue,
-		},
+		body,
 		json: true,
 		returnFullResponse: true,
 	};
@@ -463,14 +546,20 @@ async function getRecords(
 	this: IExecuteFunctions,
 	baseUrl: string,
 	accessToken: string,
-	workspace: string,
-	object: string,
+	workspaceName: string,
+	workspaceKey: string,
+	objectName: string,
+	objectKey: string,
 	itemIndex: number,
 ): Promise<IDataObject> {
 	const fieldsToRetrieve = this.getNodeParameter('fieldsToRetrieve', itemIndex) as string;
 	const filtersInput = this.getNodeParameter('filters', itemIndex) as {
 		filterValues?: Array<{ fieldName: string; fieldValue: string; valueAsBool: boolean }>;
 	};
+	const recordKeysInput = this.getNodeParameter('recordKeys', itemIndex) as string;
+	const recordKeys = recordKeysInput
+		? recordKeysInput.split(',').map((key) => key.trim()).filter((key) => key)
+		: [];
 
 	// Parse fields to retrieve
 	const fields = fieldsToRetrieve
@@ -489,14 +578,29 @@ async function getRecords(
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
 	const body: IDataObject = {
-		workspace,
-		object,
 		fieldByName: true,
 		filters: filters,
 	};
 
+
+	if (workspaceKey) {
+		body.workspaceKey = workspaceKey;
+	} else if (workspaceName) {
+		body.workspace = workspaceName;
+	}
+
+	if (objectKey) {
+		body.objectKey = objectKey;
+	} else if (objectName) {
+		body.object = objectName;
+	}
+
 	if (fields.length > 0) {
 		body.fields = fields;
+	}
+
+	if (recordKeys.length > 0) {
+		body.recordKeys = recordKeys;
 	}
 
 	const options: IHttpRequestOptions = {
@@ -530,14 +634,34 @@ async function updateRecord(
 	this: IExecuteFunctions,
 	baseUrl: string,
 	accessToken: string,
-	workspace: string,
-	object: string,
-	recordKey: string,
+	workspaceName: string,
+	workspaceKey: string,
+	objectName: string,
+	objectKey: string,
 	itemIndex: number,
 ): Promise<IDataObject> {
 	const fieldsInput = this.getNodeParameter('fields', itemIndex) as {
 		fieldValues?: Array<{ name: string; value: string }>;
 	};
+	const recordKey = this.getNodeParameter('recordKey', itemIndex) as string;
+
+	const body: IDataObject = {
+		recordKey,
+		fieldByName: true,
+		fields: fieldsInput.fieldValues,
+	};
+
+	if (workspaceKey) {
+		body.workspaceKey = workspaceKey;
+	} else if (workspaceName) {
+		body.workspace = workspaceName;
+	}
+
+	if (objectKey) {
+		body.objectKey = objectKey;
+	} else if (objectName) {
+		body.object = objectName;
+	}
 
 	const options: IHttpRequestOptions = {
 		method: 'PATCH',
@@ -546,13 +670,7 @@ async function updateRecord(
 			Authorization: `Bearer ${accessToken}`,
 			'Content-Type': 'application/json',
 		},
-		body: {
-			workspace,
-			object,
-			recordKey,
-			fieldByName: true,
-			fields: fieldsInput.fieldValues,
-		},
+		body,
 		json: true,
 		returnFullResponse: true,
 	};
