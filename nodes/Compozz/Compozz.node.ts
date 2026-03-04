@@ -105,10 +105,9 @@ export class Compozz implements INodeType {
 			},
 			// Common fields
 			{
-				displayName: 'Workspace name',
+				displayName: 'Workspace Name',
 				name: 'workspace',
 				type: 'string',
-				required: false,
 				default: '',
 				description: 'The name of the workspace (either name or key must be provided)',
 				displayOptions: {
@@ -118,10 +117,9 @@ export class Compozz implements INodeType {
 				},
 			},
 			{
-				displayName: 'Workspace key',
+				displayName: 'Workspace Key',
 				name: 'workspaceKey',
 				type: 'string',
-				required: false,
 				default: '',
 				description: 'The key of the workspace (either name or key must be provided)',
 				displayOptions: {
@@ -131,10 +129,9 @@ export class Compozz implements INodeType {
 				},
 			},
 			{
-				displayName: 'Object name',
+				displayName: 'Object Name',
 				name: 'object',
 				type: 'string',
-				required: false,
 				default: '',
 				description: 'The name of the object (either name or key must be provided)',
 				displayOptions: {
@@ -144,10 +141,9 @@ export class Compozz implements INodeType {
 				},
 			},
 			{
-				displayName: 'Object key',
+				displayName: 'Object Key',
 				name: 'objectKey',
 				type: 'string',
-				required: false,
 				default: '',
 				description: 'The key of the object (either name or key must be provided)',
 				displayOptions: {
@@ -227,7 +223,7 @@ export class Compozz implements INodeType {
 			},
 			// Keys of the records to retrieve (for getMany)
 			{
-				displayName: 'Keys of the records to retrieve',
+				displayName: 'Record Keys',
 				name: 'recordKeys',
 				type: 'string',
 				default: '',
