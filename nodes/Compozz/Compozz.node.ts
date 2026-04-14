@@ -167,7 +167,7 @@ export class Compozz implements INodeType {
 					},
 				},
 			},
-			// Link By Value (for create)
+			// Link By Value (for create and update)
 			{
 				displayName: 'Link By Value',
 				name: 'linkByValue',
@@ -177,7 +177,7 @@ export class Compozz implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['record'],
-						operation: ['create'],
+						operation: ['create', 'update'],
 					},
 				},
 			},
@@ -640,11 +640,13 @@ async function updateRecord(
 		fieldValues?: Array<{ name: string; value: string }>;
 	};
 	const recordKey = this.getNodeParameter('recordKey', itemIndex) as string;
+	const linkByValue = this.getNodeParameter('linkByValue', itemIndex, true) as boolean;
 
 	const body: IDataObject = {
 		recordKey,
 		fieldByName: true,
 		fields: fieldsInput.fieldValues,
+		linkByValue,
 	};
 
 	if (workspaceKey) {
