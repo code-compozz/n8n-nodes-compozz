@@ -315,7 +315,7 @@ export class Compozz implements INodeType {
 								description: 'Whether to treat the value as a boolean',
 							},
 							{
-								displayName: 'Value as key',
+								displayName: 'Value as Key',
 								name: 'valueAsKey',
 								type: 'boolean',
 								default: false,
