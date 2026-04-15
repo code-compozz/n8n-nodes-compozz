@@ -79,6 +79,12 @@ export class Compozz implements INodeType {
 						description: 'Update an existing record',
 						action: 'Update a record',
 					},
+					{
+						name: 'Delete',
+						value: 'delete',
+						description: 'Delete one or more records',
+						action: 'Delete records',
+					},
 				],
 				default: 'create',
 			},
@@ -221,18 +227,18 @@ export class Compozz implements INodeType {
 					},
 				],
 			},
-			// Keys of the records to retrieve (for getMany)
+			// Keys of the records to retrieve or delete (for getMany and delete)
 			{
 				displayName: 'Record Keys',
 				name: 'recordKeys',
 				type: 'string',
 				default: '',
 				placeholder: 'key1, key2, key3',
-				description: 'Comma-separated list of keys of the records to retrieve (leave empty for all)',
+				description: 'Comma-separated list of record keys (leave empty to retrieve all records; required for delete)',
 				displayOptions: {
 					show: {
 						resource: ['record'],
-						operation: ['getMany'],
+						operation: ['getMany', 'delete'],
 					},
 				},
 			},
@@ -414,6 +420,17 @@ export class Compozz implements INodeType {
 						);
 					} else if (operation === 'update') {
 						responseData = await updateRecord.call(
+							this,
+							baseUrl,
+							accessToken,
+							workspace,
+							workspaceKey,
+							object,
+							objectKey,
+							i,
+						);
+					} else if (operation === 'delete') {
+						responseData = await deleteRecords.call(
 							this,
 							baseUrl,
 							accessToken,
@@ -682,6 +699,69 @@ async function updateRecord(
 	}
 
 	return {};
+}
+
+/**
+ * Delete records
+ */
+async function deleteRecords(
+	this: IExecuteFunctions,
+	baseUrl: string,
+	accessToken: string,
+	workspaceName: string,
+	workspaceKey: string,
+	objectName: string,
+	objectKey: string,
+	itemIndex: number,
+): Promise<IDataObject> {
+	const recordKeysInput = this.getNodeParameter('recordKeys', itemIndex) as string;
+	const recordKeys = recordKeysInput
+		? recordKeysInput.split(',').map((k) => k.trim()).filter((k) => k)
+		: [];
+
+	if (recordKeys.length === 0) {
+		throw new NodeOperationError(
+			this.getNode(),
+			'At least one record key must be provided for delete',
+			{ itemIndex },
+		);
+	}
+
+	const body: IDataObject = { recordKeys };
+
+	if (workspaceKey) {
+		body.workspaceKey = workspaceKey;
+	} else if (workspaceName) {
+		body.workspace = workspaceName;
+	}
+
+	if (objectKey) {
+		body.objectKey = objectKey;
+	} else if (objectName) {
+		body.object = objectName;
+	}
+
+	const options: IHttpRequestOptions = {
+		method: 'DELETE',
+		url: `${baseUrl}/data/records`,
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/json',
+		},
+		body,
+		json: true,
+		returnFullResponse: true,
+	};
+
+	const response = await this.helpers.httpRequest(options);
+
+	if (response.statusCode !== 204) {
+		throw new NodeOperationError(this.getNode(), response.body, {
+			itemIndex,
+		});
+	}
+
+	return { deleted: recordKeys.length, recordKeys };
 }
 
 /**
