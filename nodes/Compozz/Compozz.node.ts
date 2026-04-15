@@ -314,6 +314,13 @@ export class Compozz implements INodeType {
 								default: false,
 								description: 'Whether to treat the value as a boolean',
 							},
+							{
+								displayName: 'Value as key',
+								name: 'valueAsKey',
+								type: 'boolean',
+								default: false,
+								description: 'Whether to treat the value as a key instead of a value',
+							},
 						],
 					},
 				],
@@ -582,7 +589,7 @@ async function getRecords(
 ): Promise<IDataObject> {
 	const fieldsToRetrieve = this.getNodeParameter('fieldsToRetrieve', itemIndex) as string;
 	const filtersInput = this.getNodeParameter('filters', itemIndex) as {
-		filterValues?: Array<{ fieldName: string; fieldValue: string; valueAsBool: boolean }>;
+		filterValues?: Array<{ fieldName: string; fieldValue: string; valueAsBool: boolean; valueAsKey: boolean }>;
 	};
 	const recordKeysInput = this.getNodeParameter('recordKeys', itemIndex) as string;
 	const recordKeys = recordKeysInput
@@ -600,6 +607,8 @@ async function getRecords(
 		let fieldValue: any = filter.fieldValue;
 		if (filter.valueAsBool) {
 			fieldValue = filter.fieldValue.toLowerCase() === 'true';
+		} else if (filter.valueAsKey) {
+			fieldValue = { valueKey: filter.fieldValue };
 		}
 		filters[filter.fieldName] = fieldValue;
 	}
