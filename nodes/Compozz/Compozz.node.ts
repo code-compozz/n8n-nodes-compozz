@@ -187,6 +187,20 @@ export class Compozz implements INodeType {
 					},
 				},
 			},
+			// Field By Name (for create, update and getMany)
+			{
+				displayName: 'Field By Name',
+				name: 'fieldByName',
+				type: 'boolean',
+				default: true,
+				description: 'Whether field names are used to identify fields instead of field keys',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['create', 'update', 'getMany'],
+					},
+				},
+			},
 			// Fields (for create and update)
 			{
 				displayName: 'Fields',
@@ -508,9 +522,10 @@ async function createRecord(
 		fieldValues?: Array<{ name: string; value: string }>;
 	};
 	const linkByValue = this.getNodeParameter('linkByValue', itemIndex, true) as boolean;
+	const fieldByName = this.getNodeParameter('fieldByName', itemIndex, true) as boolean;
 
 	const body: IDataObject = {
-		fieldByName: true,
+		fieldByName,
 		fields: fieldsInput.fieldValues,
 		linkByValue,
 	};
@@ -590,8 +605,10 @@ async function getRecords(
 	}
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
+	const fieldByName = this.getNodeParameter('fieldByName', itemIndex, true) as boolean;
+
 	const body: IDataObject = {
-		fieldByName: true,
+		fieldByName,
 		filters: filters,
 	};
 
@@ -658,10 +675,11 @@ async function updateRecord(
 	};
 	const recordKey = this.getNodeParameter('recordKey', itemIndex) as string;
 	const linkByValue = this.getNodeParameter('linkByValue', itemIndex, true) as boolean;
+	const fieldByName = this.getNodeParameter('fieldByName', itemIndex, true) as boolean;
 
 	const body: IDataObject = {
 		recordKey,
-		fieldByName: true,
+		fieldByName,
 		fields: fieldsInput.fieldValues,
 		linkByValue,
 	};
