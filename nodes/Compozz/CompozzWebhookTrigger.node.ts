@@ -194,7 +194,10 @@ async function validateSignatureCall(
 	};
 
 	try {
-		const response = await this.helpers.httpRequest(options);
+		const responseRaw = await this.helpers.httpRequest(options);
+		// When json: false, httpRequest returns a raw string — parse it manually
+		const response: IDataObject =
+			typeof responseRaw === 'string' ? (JSON.parse(responseRaw) as IDataObject) : responseRaw;
 		return response.valid === true;
 	} catch (error: unknown) {
 		// If it's an authorization error (401), propagate it so we can see the real issue
