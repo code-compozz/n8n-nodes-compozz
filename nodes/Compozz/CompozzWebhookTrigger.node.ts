@@ -101,14 +101,16 @@ export class CompozzWebhookTrigger implements INodeType {
 			}
 
 			// Validate signature
-			// Use raw JSON string to preserve exact bytes from compozz-data
-			const bodyJsonString = JSON.stringify(body);
+			// Use raw body bytes to preserve the exact bytes that were signed by compozz-data.
+			// JSON.stringify(req.body) would differ from the original: Go escapes <, >, & as
+			// \u003c etc., and other subtle differences. rawBody has the untouched original bytes.
+			const rawBodyString = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(body);
 			const isValid = await validateSignatureCall.call(
 				this,
 				baseUrl,
 				accessToken,
 				signature || '',
-				bodyJsonString,
+				rawBodyString,
 				tenantId || '',
 			);
 
