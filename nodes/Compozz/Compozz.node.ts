@@ -325,6 +325,61 @@ export class Compozz implements INodeType {
 					},
 				],
 			},
+			// Aggregations (for getMany)
+			{
+				displayName: 'Aggregations',
+				name: 'aggregations',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+				},
+				default: {},
+				placeholder: 'Add Aggregation',
+				description: 'Per-field aggregation to apply when retrieving records',
+				displayOptions: {
+					show: {
+						resource: ['record'],
+						operation: ['getMany'],
+					},
+				},
+				options: [
+					{
+						name: 'aggregationValues',
+						displayName: 'Aggregation',
+						values: [
+							{
+								displayName: 'Field Name',
+								name: 'fieldName',
+								type: 'string',
+								default: '',
+								description: 'Name (or key) of the field to aggregate',
+							},
+							{
+								displayName: 'Aggregation Type',
+								name: 'aggregationType',
+								type: 'options',
+								default: 'NO_AGGR',
+								options: [
+									{ name: 'None', value: 'NO_AGGR' },
+									{ name: 'Count', value: 'COUNT' },
+									{ name: 'Sum', value: 'SUM' },
+									{ name: 'Average', value: 'AVG' },
+									{ name: 'Min', value: 'MIN' },
+									{ name: 'Max', value: 'MAX' },
+									{ name: 'Concat', value: 'CONCAT' },
+									{ name: 'First', value: 'FIRST' },
+									{ name: 'Year', value: 'YEAR' },
+									{ name: 'Quarter', value: 'QUARTER' },
+									{ name: 'Month', value: 'MONTH' },
+									{ name: 'Week', value: 'WEEK' },
+									{ name: 'Day', value: 'DAY' },
+									{ name: 'Value', value: 'VALUE' },
+								],
+							},
+						],
+					},
+				],
+			},
 			// Webhook fields
 			{
 				displayName: 'Signature',
@@ -591,6 +646,9 @@ async function getRecords(
 	const filtersInput = this.getNodeParameter('filters', itemIndex) as {
 		filterValues?: Array<{ fieldName: string; fieldValue: string; valueAsBool: boolean; valueAsKey: boolean }>;
 	};
+	const aggregationsInput = this.getNodeParameter('aggregations', itemIndex) as {
+		aggregationValues?: Array<{ fieldName: string; aggregationType: string }>;
+	};
 	const recordKeysInput = this.getNodeParameter('recordKeys', itemIndex) as string;
 	const recordKeys = recordKeysInput
 		? recordKeysInput.split(',').map((key) => key.trim()).filter((key) => key)
@@ -614,12 +672,23 @@ async function getRecords(
 	}
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
+	const aggregations: Record<string, string> = {};
+	for (const aggr of aggregationsInput.aggregationValues || []) {
+		if (aggr.fieldName) {
+			aggregations[aggr.fieldName] = aggr.aggregationType;
+		}
+	}
+
 	const fieldByName = this.getNodeParameter('fieldByName', itemIndex, true) as boolean;
 
 	const body: IDataObject = {
 		fieldByName,
-		filters: filters,
+		filters,
 	};
+
+	if (Object.keys(aggregations).length > 0) {
+		body.aggregations = aggregations;
+	}
 
 
 	if (workspaceKey) {
