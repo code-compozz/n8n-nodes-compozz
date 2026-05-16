@@ -308,6 +308,23 @@ export class Compozz implements INodeType {
 								description: 'Value to filter by',
 							},
 							{
+								displayName: 'Operator',
+								name: 'operator',
+								type: 'options',
+								default: 'EQUAL',
+								options: [
+									{ name: 'Equals',                value: 'EQUAL'        },
+									{ name: 'Not Equals',            value: 'NOT_EQUAL'    },
+									{ name: 'Greater Than',          value: 'SUP'          },
+									{ name: 'Greater Than or Equal', value: 'SUP_EQUAL'    },
+									{ name: 'Less Than',             value: 'INF'          },
+									{ name: 'Less Than or Equal',    value: 'INF_EQUAL'    },
+									{ name: 'Contains',              value: 'CONTAINS'     },
+									{ name: 'Not Contains',          value: 'NOT_CONTAINS' },
+								],
+								description: 'Comparison operator for this filter',
+							},
+							{
 								displayName: 'Value as Boolean',
 								name: 'valueAsBool',
 								type: 'boolean',
@@ -643,7 +660,7 @@ async function getRecords(
 ): Promise<IDataObject> {
 	const fieldsToRetrieve = this.getNodeParameter('fieldsToRetrieve', itemIndex) as string;
 	const filtersInput = this.getNodeParameter('filters', itemIndex) as {
-		filterValues?: Array<{ fieldName: string; fieldValue: string; valueAsBool: boolean; valueAsKey: boolean }>;
+		filterValues?: Array<{ fieldName: string; fieldValue: string; operator: string; valueAsBool: boolean; valueAsKey: boolean }>;
 	};
 	const aggregationsInput = this.getNodeParameter('aggregations', itemIndex) as {
 		aggregationValues?: Array<{ fieldName: string; aggregationType: string }>;
@@ -661,13 +678,19 @@ async function getRecords(
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	const filters: Record<string, any> = {};
 	for (const filter of filtersInput.filterValues || []) {
-		let fieldValue: any = filter.fieldValue;
+		const filterValue: { value: any, valueKey: string, operator: string } = { value: filter.fieldValue, valueKey: '', operator: 'EQUAL' };
 		if (filter.valueAsBool) {
-			fieldValue = filter.fieldValue.toLowerCase() === 'true';
+			filterValue.value = filter.fieldValue.toLowerCase() === 'true';
 		} else if (filter.valueAsKey) {
-			fieldValue = { valueKey: filter.fieldValue };
+			filterValue.valueKey = filter.fieldValue;
+			filterValue.value = undefined;
 		}
-		filters[filter.fieldName] = fieldValue;
+		
+		const operator: string = filter.operator;
+		if (operator !== 'EQUAL') {
+			filterValue.operator = operator;
+		}
+		filters[filter.fieldName] = filterValue;
 	}
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
