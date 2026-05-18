@@ -680,20 +680,22 @@ async function getRecords(
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	const filters: Record<string, any> = {};
 	for (const filter of filtersInput.filterValues || []) {
-		const filterValue: { value?: any, valueKey?: string, operator?: string } = {};
-		if (filter.valueAsBool) {
-			filterValue.value = filter.fieldValue.toLowerCase() === 'true';
-		} else if (filter.valueAsKey) {
-			filterValue.valueKey = filter.fieldValue;
-		} else {
-			filterValue.value = filter.fieldValue;
-		}
-
 		const operator: string = filter.operator;
-		if (operator !== 'EQUAL') {
-			filterValue.operator = operator;
+		if (filter.valueAsBool) {
+			const filterValue: { value: boolean, operator?: string } = { value: filter.fieldValue.toLowerCase() === 'true' };
+			if (operator !== 'EQUAL') filterValue.operator = operator;
+			filters[filter.fieldName] = filterValue;
+		} else if (filter.valueAsKey) {
+			const filterValue: { valueKey: string, operator?: string } = { valueKey: filter.fieldValue };
+			if (operator !== 'EQUAL') filterValue.operator = operator;
+			filters[filter.fieldName] = filterValue;
+		} else if (operator !== 'EQUAL') {
+			filters[filter.fieldName] = { value: filter.fieldValue, operator };
+		} else {
+			// EQUAL with plain value: send as-is for backward compatibility
+			// (supports arrays, which the backend handles as OR filters)
+			filters[filter.fieldName] = filter.fieldValue;
 		}
-		filters[filter.fieldName] = filterValue;
 	}
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
