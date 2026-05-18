@@ -680,14 +680,15 @@ async function getRecords(
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	const filters: Record<string, any> = {};
 	for (const filter of filtersInput.filterValues || []) {
-		const filterValue: { value: any, valueKey: string, operator: string } = { value: filter.fieldValue, valueKey: '', operator: 'EQUAL' };
+		const filterValue: { value?: any, valueKey?: string, operator?: string } = {};
 		if (filter.valueAsBool) {
 			filterValue.value = filter.fieldValue.toLowerCase() === 'true';
 		} else if (filter.valueAsKey) {
 			filterValue.valueKey = filter.fieldValue;
-			filterValue.value = undefined;
+		} else {
+			filterValue.value = filter.fieldValue;
 		}
-		
+
 		const operator: string = filter.operator;
 		if (operator !== 'EQUAL') {
 			filterValue.operator = operator;
