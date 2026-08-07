@@ -12,6 +12,14 @@ import type {
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { getAccessToken } from './utils';
 
+// Minimal typing for the global fetch available in the n8n runtime (Node >= 18);
+// the project tsconfig targets es2019 and has no @types/node, so the global is
+// not typed otherwise.
+declare const fetch: (
+	url: string,
+	init?: { method?: string; headers?: Record<string, string> },
+) => Promise<{ ok: boolean; status: number }>;
+
 export class Compozz implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Compozz',
@@ -565,28 +573,32 @@ export class Compozz implements INodeType {
 					return { status: 'OK', message: 'Configuration looks valid (no remote check for Ollama)' };
 				}
 
+				// Native fetch: the credential-test context only exposes the
+				// deprecated `request` helper, which the community-nodes linter rejects.
+				let url: string;
+				let headers: Record<string, string>;
+				if (provider === 'anthropic') {
+					url = `${baseUrl || 'https://api.anthropic.com'}/v1/models`;
+					headers = { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
+				} else {
+					const defaultBase =
+						provider === 'mistral' ? 'https://api.mistral.ai/v1' : 'https://api.openai.com/v1';
+					url = `${baseUrl || defaultBase}/models`;
+					headers = { Authorization: `Bearer ${apiKey}` };
+				}
+
 				try {
-					if (provider === 'anthropic') {
-						await this.helpers.request({
-							method: 'GET',
-							url: `${baseUrl || 'https://api.anthropic.com'}/v1/models`,
-							headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-							json: true,
-						});
-					} else {
-						const defaultBase =
-							provider === 'mistral' ? 'https://api.mistral.ai/v1' : 'https://api.openai.com/v1';
-						await this.helpers.request({
-							method: 'GET',
-							url: `${baseUrl || defaultBase}/models`,
-							headers: { Authorization: `Bearer ${apiKey}` },
-							json: true,
-						});
+					const response = await fetch(url, { method: 'GET', headers });
+					if (!response.ok) {
+						return {
+							status: 'Error',
+							message: `The provider rejected the API key (HTTP ${response.status})`,
+						};
 					}
 				} catch (error) {
 					return {
 						status: 'Error',
-						message: `The provider rejected the API key: ${(error as Error).message}`,
+						message: `Could not reach the provider: ${(error as Error).message}`,
 					};
 				}
 
