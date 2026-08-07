@@ -5,6 +5,9 @@ import type {
 	INodeTypeDescription,
 	IDataObject,
 	IHttpRequestOptions,
+	ICredentialTestFunctions,
+	ICredentialsDecrypted,
+	INodeCredentialTestResult,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { getAccessToken } from './utils';
@@ -32,6 +35,7 @@ export class Compozz implements INodeType {
 			{
 				name: 'compozzAiApi',
 				required: false,
+				testedBy: 'compozzAiApiTest',
 				displayOptions: {
 					show: {
 						resource: ['ai'],
@@ -148,7 +152,6 @@ export class Compozz implements INodeType {
 				displayName: 'Provider Source',
 				name: 'providerSource',
 				type: 'options',
-				// eslint-disable-next-line n8n-nodes-base/node-param-options-type-unsorted-items
 				options: [
 					{
 						name: 'AI Credential',
@@ -539,6 +542,57 @@ export class Compozz implements INodeType {
 				},
 			},
 		],
+	};
+
+	methods = {
+		credentialTest: {
+			async compozzAiApiTest(
+				this: ICredentialTestFunctions,
+				credential: ICredentialsDecrypted,
+			): Promise<INodeCredentialTestResult> {
+				const data = (credential.data ?? {}) as IDataObject;
+				const provider = data.provider as string;
+				const apiKey = ((data.apiKey as string) || '').trim();
+				const baseUrl = ((data.baseUrl as string) || '').replace(/\/$/, '');
+
+				if (provider !== 'ollama' && !apiKey) {
+					return { status: 'Error', message: 'An API key is required for this provider' };
+				}
+
+				// Ollama endpoints usually live on the server-side network and are
+				// not reachable from n8n, so only the configuration is validated.
+				if (provider === 'ollama') {
+					return { status: 'OK', message: 'Configuration looks valid (no remote check for Ollama)' };
+				}
+
+				try {
+					if (provider === 'anthropic') {
+						await this.helpers.request({
+							method: 'GET',
+							url: `${baseUrl || 'https://api.anthropic.com'}/v1/models`,
+							headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+							json: true,
+						});
+					} else {
+						const defaultBase =
+							provider === 'mistral' ? 'https://api.mistral.ai/v1' : 'https://api.openai.com/v1';
+						await this.helpers.request({
+							method: 'GET',
+							url: `${baseUrl || defaultBase}/models`,
+							headers: { Authorization: `Bearer ${apiKey}` },
+							json: true,
+						});
+					}
+				} catch (error) {
+					return {
+						status: 'Error',
+						message: `The provider rejected the API key: ${(error as Error).message}`,
+					};
+				}
+
+				return { status: 'OK', message: 'Connection successful' };
+			},
+		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {

@@ -2,7 +2,7 @@ import type { ICredentialType, INodeProperties } from 'n8n-workflow';
 
 export class CompozzAiApi implements ICredentialType {
 	name = 'compozzAiApi';
-	displayName = 'Compozz AI Provider';
+	displayName = 'Compozz AI Provider API';
 	icon = { light: 'file:../nodes/Compozz/compozz.svg', dark: 'file:../nodes/Compozz/compozz.dark.svg' } as const;
 	documentationUrl = 'https://app.compozz.com/docs';
 
