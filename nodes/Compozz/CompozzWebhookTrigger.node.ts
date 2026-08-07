@@ -211,13 +211,19 @@ async function validateSignatureCall(
 		let errorDetails: string | undefined;
 		
 		if (errorObj.response) {
-			const responseBody = errorObj.response as IDataObject;
+			const rawResponse = errorObj.response as IDataObject;
+			// n8n/axios HTTP errors put the actual response body under `.data` (or `.body`),
+			// while `.response` itself carries circular low-level internals (request -> socket
+			// -> agent). Read and serialize the body only, never the raw response object —
+			// otherwise JSON.stringify throws "Converting circular structure to JSON" and masks
+			// the real validation error (e.g. a 403 tenant mismatch) behind a confusing crash.
+			const responseBody = (rawResponse.data ?? rawResponse.body ?? rawResponse) as IDataObject;
 			if (responseBody.message && typeof responseBody.message === 'string') {
 				errorMessage = responseBody.message;
 			} else if (responseBody.error && typeof responseBody.error === 'string') {
 				errorMessage = responseBody.error;
 			}
-			errorDetails = JSON.stringify(responseBody);
+			errorDetails = safeStringify(responseBody);
 		} else if (errorObj.message && typeof errorObj.message === 'string') {
 			errorMessage = errorObj.message;
 		}
@@ -240,4 +246,25 @@ async function validateSignatureCall(
 		// For other errors (network, etc.), return false (signature invalid)
 		return false;
 	}
+}
+
+/**
+ * JSON.stringify variant that is resilient to circular references.
+ *
+ * n8n/axios HTTP errors expose low-level objects (Agent, Socket, ClientRequest)
+ * that reference each other in a cycle. A plain JSON.stringify on them throws
+ * "Converting circular structure to JSON", which previously bubbled up and masked
+ * the real validation error behind a 500 crash. This keeps serialization safe.
+ */
+function safeStringify(value: unknown): string {
+	const seen = new WeakSet<object>();
+	return JSON.stringify(value, (_key, val) => {
+		if (typeof val === 'object' && val !== null) {
+			if (seen.has(val)) {
+				return '[Circular]';
+			}
+			seen.add(val);
+		}
+		return val;
+	});
 }
