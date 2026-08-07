@@ -37,6 +37,17 @@ To use this node, you need to configure the Compozz API credentials:
 
 The node automatically handles authentication by obtaining and caching access tokens from the `/auth/login` endpoint.
 
+### Compozz AI Provider
+
+Required for the AI resource when using your own provider (BYOK — bring your own key):
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| Provider | Options | Yes | `openai` | AI provider: `anthropic`, `mistral`, `ollama` or `openai` |
+| API Key | String (password) | No | - | Your own API key for the provider (not needed for Ollama). Sent to the Compozz AI endpoint with each request, never stored server-side |
+| Base URL | String | No | - | Optional provider endpoint override |
+| Default Model | String | No | - | Optional default model (can be overridden per node) |
+
 ## Node Reference
 
 ### Compozz
@@ -47,6 +58,7 @@ The Compozz node allows you to manage records in your Compozz workspaces.
 
 | Resource | Description |
 |----------|-------------|
+| AI | Provider-agnostic AI chat (prompt → answer) |
 | Record | Manage records within Compozz objects |
 | Webhook | Webhook signature validation |
 
@@ -65,6 +77,14 @@ The Compozz node allows you to manage records in your Compozz workspaces.
 | Operation | Description | API Endpoint |
 |-----------|-------------|--------------|
 | Validate | Validate a webhook signature | `POST /admin/webhook/validate` |
+
+##### AI
+
+| Operation | Description | API Endpoint |
+|-----------|-------------|--------------|
+| Chat | Send a prompt to an AI provider and return the answer | `POST /ai/chat` |
+
+Parameters: Provider Source (`AI Credential` for BYOK via the Compozz AI Provider credential, or `Claude Code (Subscription)` — restricted to organizations allowed by the Compozz server), Prompt (required), System Prompt (optional), Model (optional override).
 
 ### Parameters
 

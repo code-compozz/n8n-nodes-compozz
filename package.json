@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-compozz",
-	"version": "1.6.4",
+	"version": "1.7.0",
 	"description": "n8n community node for Compozz",
 	"license": "MIT",
 	"homepage": "https://compozz.com",
@@ -37,7 +37,8 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/CompozzApi.credentials.js"
+			"dist/credentials/CompozzApi.credentials.js",
+			"dist/credentials/CompozzAiApi.credentials.js"
 		],
 		"nodes": [
 			"dist/nodes/Compozz/Compozz.node.js",

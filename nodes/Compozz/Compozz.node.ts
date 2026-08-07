@@ -29,6 +29,15 @@ export class Compozz implements INodeType {
 				name: 'compozzApi',
 				required: true,
 			},
+			{
+				name: 'compozzAiApi',
+				required: false,
+				displayOptions: {
+					show: {
+						resource: ['ai'],
+					},
+				},
+			},
 		],
 		properties: [
 			// Resource
@@ -38,6 +47,10 @@ export class Compozz implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
+					{
+						name: 'AI',
+						value: 'ai',
+					},
 					{
 						name: 'Record',
 						value: 'record',
@@ -108,6 +121,93 @@ export class Compozz implements INodeType {
 					},
 				],
 				default: 'validate',
+			},
+			// AI operations
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['ai'],
+					},
+				},
+				options: [
+					{
+						name: 'Chat',
+						value: 'chat',
+						description: 'Send a prompt to an AI provider and return the answer',
+						action: 'Chat with an AI provider',
+					},
+				],
+				default: 'chat',
+			},
+			// AI fields
+			{
+				displayName: 'Provider Source',
+				name: 'providerSource',
+				type: 'options',
+				// eslint-disable-next-line n8n-nodes-base/node-param-options-type-unsorted-items
+				options: [
+					{
+						name: 'AI Credential',
+						value: 'credential',
+						description: 'Use the provider and API key defined in the Compozz AI credential',
+					},
+					{
+						name: 'Claude Code (Subscription)',
+						value: 'claude-code',
+						description:
+							'Use the server-side Claude Code subscription (restricted to organizations allowed by the Compozz server)',
+					},
+				],
+				default: 'credential',
+				displayOptions: {
+					show: {
+						resource: ['ai'],
+					},
+				},
+			},
+			{
+				displayName: 'Prompt',
+				name: 'prompt',
+				type: 'string',
+				typeOptions: { rows: 4 },
+				required: true,
+				default: '',
+				description: 'The prompt to send to the AI provider',
+				displayOptions: {
+					show: {
+						resource: ['ai'],
+					},
+				},
+			},
+			{
+				displayName: 'System Prompt',
+				name: 'systemPrompt',
+				type: 'string',
+				typeOptions: { rows: 2 },
+				default: '',
+				description: 'Optional system prompt (instructions, tone, output format)',
+				displayOptions: {
+					show: {
+						resource: ['ai'],
+					},
+				},
+			},
+			{
+				displayName: 'Model',
+				name: 'model',
+				type: 'string',
+				default: '',
+				description:
+					'Optional model override (defaults to the credential default model, then the provider default)',
+				displayOptions: {
+					show: {
+						resource: ['ai'],
+					},
+				},
 			},
 			// Common fields
 			{
@@ -545,6 +645,20 @@ export class Compozz implements INodeType {
 						{ itemData: { item: i } },
 					);
 					returnData.push(...executionData);
+				} else if (resource === 'ai') {
+					if (operation === 'chat') {
+						responseData = await aiChat.call(this, baseUrl, accessToken, i);
+
+						const executionData = this.helpers.constructExecutionMetaData(
+							this.helpers.returnJsonArray([responseData]),
+							{ itemData: { item: i } },
+						);
+						returnData.push(...executionData);
+					} else {
+						throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
+							itemIndex: i,
+						});
+					}
 				} else if (resource === 'webhook') {
 					if (operation === 'validate') {
 						const signature = this.getNodeParameter('signature', i) as string;
@@ -776,7 +890,7 @@ async function updateRecord(
 	itemIndex: number,
 ): Promise<IDataObject> {
 	const fieldsInput = this.getNodeParameter('fields', itemIndex) as {
-		fieldValues?: Array<{ name: string; value: string }>;
+		fieldValues?: Array<{ name: string; value: string; }>;
 	};
 	const recordKey = this.getNodeParameter('recordKey', itemIndex) as string;
 	const linkByValue = this.getNodeParameter('linkByValue', itemIndex, true) as boolean;
@@ -924,4 +1038,63 @@ async function validateWebhookSignature(
 	}
 
 	return response.body as IDataObject;
+}
+
+/**
+ * Send a prompt to the Compozz AI chat endpoint (provider-agnostic)
+ */
+async function aiChat(
+	this: IExecuteFunctions,
+	baseUrl: string,
+	accessToken: string,
+	itemIndex: number,
+): Promise<IDataObject> {
+	const providerSource = this.getNodeParameter('providerSource', itemIndex, 'credential') as string;
+	const prompt = this.getNodeParameter('prompt', itemIndex) as string;
+	const systemPrompt = this.getNodeParameter('systemPrompt', itemIndex, '') as string;
+	const model = this.getNodeParameter('model', itemIndex, '') as string;
+
+	const body: IDataObject = { prompt };
+	if (systemPrompt) {
+		body.system = systemPrompt;
+	}
+
+	if (providerSource === 'claude-code') {
+		// Uses the subscription configured on the Compozz server; the server
+		// only accepts it for explicitly allowed organizations.
+		body.provider = 'claude-code';
+		if (model) {
+			body.model = model;
+		}
+	} else {
+		// BYOK: the provider and API key come from the user's own AI credential
+		// and are forwarded to the Compozz AI endpoint over HTTPS.
+		const aiCredentials = await this.getCredentials('compozzAiApi', itemIndex);
+		body.provider = aiCredentials.provider as string;
+		if (aiCredentials.apiKey) {
+			body.apiKey = aiCredentials.apiKey as string;
+		}
+		if (aiCredentials.baseUrl) {
+			body.baseUrl = (aiCredentials.baseUrl as string).replace(/\/$/, '');
+		}
+		const effectiveModel = model || ((aiCredentials.defaultModel as string) ?? '');
+		if (effectiveModel) {
+			body.model = effectiveModel;
+		}
+	}
+
+	const options: IHttpRequestOptions = {
+		method: 'POST',
+		url: `${baseUrl}/ai/chat`,
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/json',
+		},
+		body,
+		json: true,
+		timeout: 300000, // LLM calls can be slow
+	};
+
+	const response = await this.helpers.httpRequest(options);
+	return response as IDataObject;
 }
